@@ -6,7 +6,6 @@ internal functionality. They are **not** guaranteed to be stable - which means
 they actual input parameters/output type may change in future releases.
 """
 import logging
-import os
 from itertools import chain
 
 from django.conf import settings
@@ -21,7 +20,6 @@ from guardian.ctypes import get_content_type
 from guardian.exceptions import NotUserNorGroup
 
 logger = logging.getLogger(__name__)
-abspath = lambda *p: os.path.abspath(os.path.join(*p))
 
 
 def get_anonymous_user():

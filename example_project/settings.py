@@ -1,17 +1,13 @@
-import os
 import sys
+from pathlib import Path
 import environ
 
 env = environ.Env()
-
-abspath = lambda *p: os.path.abspath(os.path.join(*p))
-
-
 DEBUG = True
 SECRET_KEY = 'CHANGE_THIS_TO_SOMETHING_UNIQUE_AND_SECURE'
 
-PROJECT_ROOT = abspath(os.path.dirname(__file__))
-GUARDIAN_MODULE_PATH = abspath(PROJECT_ROOT, '..')
+PROJECT_ROOT = Path(__file__).parent.absolute()
+GUARDIAN_MODULE_PATH = PROJECT_ROOT.parent.absolute()
 sys.path.insert(0, GUARDIAN_MODULE_PATH)
 
 DATABASES = {'default': env.db(default="sqlite://./example.db")}
@@ -30,19 +26,6 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
 )
 
-if 'GRAPPELLI' in os.environ:
-    try:
-        __import__('grappelli')
-        INSTALLED_APPS = ('grappelli',) + INSTALLED_APPS
-    except ImportError:
-        print("django-grappelli not installed")
-
-try:
-    import rosetta
-    INSTALLED_APPS += ('rosetta',)
-except ImportError:
-    pass
-
 MIDDLEWARE = (
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -51,9 +34,9 @@ MIDDLEWARE = (
     'django.contrib.messages.middleware.MessageMiddleware',
 )
 
-STATIC_ROOT = abspath(PROJECT_ROOT, '..', 'public', 'static')
+STATIC_ROOT = GUARDIAN_MODULE_PATH / 'public' / 'static'
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [abspath(PROJECT_ROOT, 'static')]
+STATICFILES_DIRS = [PROJECT_ROOT / 'static']
 GUARDIAN_RAISE_403 = True
 
 ROOT_URLCONF = 'urls'
@@ -75,8 +58,7 @@ AUTHENTICATION_BACKENDS = (
 GUARDIAN_GET_INIT_ANONYMOUS_USER = 'core.models.get_custom_anon_user'
 
 PASSWORD_HASHERS = (
-    'django.contrib.auth.hashers.MD5PasswordHasher',
-    'django.contrib.auth.hashers.SHA1PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
 )
 
 AUTH_USER_MODEL = 'core.CustomUser'
@@ -87,7 +69,7 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': (
-            os.path.join(os.path.dirname(__file__), 'templates'),
+            PROJECT_ROOT / 'templates',
         ),
         'OPTIONS': {
             'debug': DEBUG,
