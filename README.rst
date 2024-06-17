@@ -2,8 +2,8 @@
 django-guardian
 ===============
 
-.. image:: https://github.com/django-guardian/django-guardian/workflows/Tests/badge.svg?branch=devel
-  :target: https://github.com/django-guardian/django-guardian/actions/workflows/tests.yml
+.. image:: https://github.com/sevdog/django-guardian/workflows/Tests/badge.svg?branch=main-reprise
+  :target: https://github.com/sevdog/django-guardian/actions/workflows/tests.yml
 
 .. image:: https://img.shields.io/pypi/v/django-guardian.svg
     :target: https://pypi.python.org/pypi/django-guardian
@@ -22,10 +22,10 @@ Online documentation is available at https://django-guardian.readthedocs.io/.
 Requirements
 ------------
 
-* Python 3.5+
-* A supported version of Django (currently 2.2+)
+* Python 3.8+
+* A supported version of Django (currently 4.2+)
 
-GitHub Actions run tests against Django versions 2.2, 3.0, 3.1, 3.2, 4.0, and main.
+GitHub Actions run tests against Django versions 4.2, 5.1 and main.
 
 Installation
 ------------

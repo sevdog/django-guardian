@@ -4,8 +4,7 @@ name: Tests
 on:
   push:
     branches:
-      - master
-      - devel
+      - main-reprise
   pull_request:
 
 jobs:
