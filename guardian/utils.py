@@ -149,10 +149,10 @@ def get_obj_perm_model_by_conf(setting_name):
         setting_value = getattr(guardian_settings, setting_name)
         return django_apps.get_model(setting_value, require_ready=False)
     except ValueError as e:
-        raise ImproperlyConfigured("{} must be of the form 'app_label.model_name'".format(setting_value)) from e
+        raise ImproperlyConfigured(f"{setting_value} must be of the form 'app_label.model_name'") from e
     except LookupError as e:
         raise ImproperlyConfigured(
-            "{} refers to model '{}' that has not been installed".format(setting_name, setting_value)
+            f"{setting_name} refers to model '{setting_value}' that has not been installed"
         ) from e
 
 
