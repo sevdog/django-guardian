@@ -840,13 +840,17 @@ def get_objects_for_group(
 
 
 def filter_perms_queryset_by_objects(perms_queryset, objects):
-    if not isinstance(objects, models.QuerySet):
-        return perms_queryset
-    else:
-        field = "content_object__pk"
+    if isinstance(objects, models.QuerySet):
         if perms_queryset.model.objects.is_generic():
             field = "object_pk"
-        return perms_queryset.filter(**{f"{field}__in": objects.values_list("pk")})
+            pk_field = Cast("pk", output_field=perms_queryset.model._meta.get_field('object_pk'))
+        else:
+            field = "content_object__pk"
+            pk_field = "pk"
+        return perms_queryset.filter(**{f"{field}__in": objects.values_list(pk_field)})
+    else:
+
+        return perms_queryset
 
 
 def _handle_pk_field(queryset, field):
