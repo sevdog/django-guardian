@@ -1,10 +1,9 @@
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
-from django.db.models import Q
+from django.db.models.functions import Cast
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
 from guardian.exceptions import ObjectNotPersisted
-from guardian.utils import _handle_pk_field
 from django.contrib.auth.models import Permission
 
 import warnings
@@ -19,8 +18,8 @@ def _ensure_permission(perm, ctype):
 
 def _get_perm_filter(perm, model):
     if isinstance(perm, Permission):
-        return Q(permission=perm)
-    return Q(
+        return models.Q(permission=perm)
+    return models.Q(
         permission__codename=perm, permission__content_type=get_content_type(model)
     )
 
@@ -134,13 +133,13 @@ class BaseObjectPermissionManager(models.Manager):
         if getattr(obj, "pk", None) is None:
             raise ObjectNotPersisted(f"Object {obj} needs to be persisted first")
 
-        filters = Q(**{self.user_or_group_field: user_or_group}) & _get_perm_filter(
+        filters = models.Q(**{self.user_or_group_field: user_or_group}) & _get_perm_filter(
             perm, obj
         )
         if self.is_generic():
-            filters &= Q(object_pk=obj.pk)
+            filters &= models.Q(object_pk=obj.pk)
         else:
-            filters &= Q(content_object__pk=obj.pk)
+            filters &= models.Q(content_object__pk=obj.pk)
         return self.filter(filters).delete()
 
     def bulk_remove_perm(self, perm, user_or_group, queryset):
@@ -151,13 +150,13 @@ class BaseObjectPermissionManager(models.Manager):
         use ``Queryset.delete`` method for removing it. Main implication of this
         is that ``post_delete`` signals would NOT be fired.
         """
-        filters = Q(**{self.user_or_group_field: user_or_group}) & _get_perm_filter(
+        filters = models.Q(**{self.user_or_group_field: user_or_group}) & _get_perm_filter(
             perm, queryset.model
         )
         if self.is_generic():
-            filters &= Q(object_pk__in=queryset.values_list(_handle_pk_field(queryset, 'pk')))
+            filters &= models.Q(object_pk__in=queryset.values_list(Cast('pk', output_field=self.model._meta.get_field("object_pk"))))
         else:
-            filters &= Q(content_object__in=queryset)
+            filters &= models.Q(content_object__in=queryset)
 
         return self.filter(filters).delete()
 

@@ -13,8 +13,7 @@ from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model
 from django.contrib.auth.models import AnonymousUser, Group
 from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist, PermissionDenied
-from django.db import connection, models
-from django.db.models.functions import Cast, Replace
+from django.db import models
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render
 from guardian.conf import settings as guardian_settings
@@ -234,35 +233,3 @@ def evict_obj_perms_cache(obj):
         delattr(obj, '_guardian_perms_cache')
         return True
     return False
-
-
-def _handle_pk_field(queryset, field):
-    pk = queryset.model._meta.pk
-
-    if isinstance(pk, models.ForeignKey):
-        return _handle_pk_field(pk.target_field, field)
-
-    if isinstance(
-        pk,
-        (
-            models.IntegerField,
-            models.AutoField,
-            models.BigIntegerField,
-            models.PositiveIntegerField,
-            models.PositiveSmallIntegerField,
-            models.SmallIntegerField,
-        ),
-    ):
-        return Cast(field, output_field=models.BigIntegerField())
-
-    if isinstance(pk, models.UUIDField):
-        if connection.features.has_native_uuid_field:
-            return Cast(field, output_field=models.UUIDField())
-        return Replace(
-            field,
-            text=models.Value("-"),
-            replacement=models.Value(""),
-            output_field=models.CharField(),
-        )
-
-    return field

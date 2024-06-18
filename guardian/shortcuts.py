@@ -10,7 +10,8 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Q, QuerySet
+from django.db import connection, models
+from django.db.models.functions import Cast, Replace
 from django.shortcuts import _get_queryset
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
@@ -24,7 +25,6 @@ from guardian.utils import (
     get_group_obj_perms_model,
     get_identity,
     get_user_obj_perms_model,
-    _handle_pk_field,
 )
 
 GroupObjectPermission = get_group_obj_perms_model()
@@ -89,7 +89,7 @@ def assign_perm(perm, user_or_group, obj=None):
             except ValueError:
                 raise ValueError(
                     "For global permissions, first argument must be in"
-                    " format: 'app_label.codename' (is %r)" % perm
+                    f" format: 'app_label.codename' (is {perm!r})"
                 )
             perm = Permission.objects.get(
                 content_type__app_label=app_label, codename=codename
@@ -106,8 +106,8 @@ def assign_perm(perm, user_or_group, obj=None):
         if "." in perm:
             app_label, perm = perm.split(".", 1)
 
-    if isinstance(obj, (QuerySet, list)):
-        if isinstance(user_or_group, (QuerySet, list)):
+    if isinstance(obj, (models.QuerySet, list)):
+        if isinstance(user_or_group, (models.QuerySet, list)):
             raise MultipleIdentityAndObjectError(
                 "Only bulk operations on either users/groups OR objects supported"
             )
@@ -122,7 +122,7 @@ def assign_perm(perm, user_or_group, obj=None):
             )
             return model.objects.bulk_assign_perm(perm, group, obj)
 
-    if isinstance(user_or_group, (QuerySet, list)):
+    if isinstance(user_or_group, (models.QuerySet, list)):
         if user:
             model = get_user_obj_perms_model(obj)
             return model.objects.assign_perm_to_many(perm, user, obj)
@@ -173,7 +173,7 @@ def remove_perm(perm, user_or_group=None, obj=None):
             except ValueError:
                 raise ValueError(
                     "For global permissions, first argument must be in"
-                    " format: 'app_label.codename' (is %r)" % perm
+                    f" format: 'app_label.codename' (is {perm!r})"
                 )
             perm = Permission.objects.get(
                 content_type__app_label=app_label, codename=codename
@@ -188,7 +188,7 @@ def remove_perm(perm, user_or_group=None, obj=None):
     if not isinstance(perm, Permission):
         perm = perm.split(".")[-1]
 
-    if isinstance(obj, QuerySet):
+    if isinstance(obj, models.QuerySet):
         if user:
             model = get_user_obj_perms_model(obj.model)
             return model.objects.bulk_remove_perm(perm, user, obj)
@@ -303,19 +303,19 @@ def get_users_with_perms(
         related_name = user_model.user.field.related_query_name()
         if user_model.objects.is_generic():
             user_filters = {
-                "%s__content_type" % related_name: ctype,
-                "%s__object_pk" % related_name: obj.pk,
+                f"{related_name}__content_type": ctype,
+                f"{related_name}__object_pk": obj.pk,
             }
         else:
-            user_filters = {"%s__content_object" % related_name: obj}
-        qset = Q(**user_filters)
+            user_filters = {f"{related_name}__content_object": obj}
+        qset = models.Q(**user_filters)
         if only_with_perms_in is not None:
             permission_ids = Permission.objects.filter(
                 content_type=ctype, codename__in=only_with_perms_in
             ).values_list("id", flat=True)
-            qset &= Q(
+            qset &= models.Q(
                 **{
-                    "%s__permission_id__in" % related_name: permission_ids,
+                    f"{related_name}__permission_id__in": permission_ids,
                 }
             )
         if with_group_users:
@@ -335,14 +335,13 @@ def get_users_with_perms(
                         "permission_id__in": permission_ids,
                     }
                 )
-            group_ids = set(
-                group_model.objects.filter(**group_obj_perm_filters)
-                .values_list("group_id", flat=True)
-                .distinct()
+            qset = qset | models.Q(
+                groups__in=group_model.objects.filter(
+                    **group_obj_perm_filters
+                ).values_list("group_id")
             )
-            qset = qset | Q(groups__in=group_ids)
         if with_superusers:
-            qset = qset | Q(is_superuser=True)
+            qset = qset | models.Q(is_superuser=True)
         return get_user_model().objects.filter(qset).distinct()
     else:
         # TODO: Do not hit db for each user!
@@ -397,11 +396,11 @@ def get_groups_with_perms(obj, attach_perms=False):
         group_rel_name = group_model.group.field.related_query_name()
         if group_model.objects.is_generic():
             group_filters = {
-                "%s__content_type" % group_rel_name: ctype,
-                "%s__object_pk" % group_rel_name: obj.pk,
+                f"{group_rel_name}__content_type": ctype,
+                f"{group_rel_name}__object_pk": obj.pk,
             }
         else:
-            group_filters = {"%s__content_object" % group_rel_name: obj}
+            group_filters = {f"{group_rel_name}__content_object": obj}
         return Group.objects.filter(**group_filters).distinct()
     else:
         group_perms_mapping = defaultdict(list)
@@ -540,7 +539,7 @@ def get_objects_for_user(
             if app_label is not None and app_label != new_app_label:
                 raise MixedContentTypeError(
                     "Given perms must have same app "
-                    "label (%s != %s)" % (app_label, new_app_label)
+                    f"label ({app_label} != {new_app_label})"
                 )
             else:
                 app_label = new_app_label
@@ -554,7 +553,7 @@ def get_objects_for_user(
             if ctype is not None and ctype != new_ctype:
                 raise MixedContentTypeError(
                     "ContentType was once computed "
-                    "to be %s and another one %s" % (ctype, new_ctype)
+                    f"to be {ctype} and another one {new_ctype}"
                 )
             else:
                 ctype = new_ctype
@@ -636,7 +635,7 @@ def get_objects_for_user(
         group_model = get_group_obj_perms_model(queryset.model)
         group_filters = {
             "permission__content_type": ctype,
-            "group__%s" % get_user_model().groups.field.related_query_name(): user,
+            f"group__{get_user_model().groups.field.related_query_name()}": user,
         }
         if len(codenames):
             group_filters.update(
@@ -668,17 +667,17 @@ def get_objects_for_user(
 
     if not any_perm and len(codenames) > 1:
         counts = user_obj_perms_queryset.values(user_fields[0]).annotate(
-            object_pk_count=Count(user_fields[0])
+            object_pk_count=models.Count(user_fields[0])
         )
         user_obj_perms_queryset = counts.filter(object_pk_count__gte=len(codenames))
 
     pk_field = user_fields[0]
     values = user_obj_perms_queryset
-    q = Q(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
+    q = models.Q(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
     if use_groups:
         pk_field = group_fields[0]
         values = groups_obj_perms_queryset
-        q |= Q(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
+        q |= models.Q(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
 
     return queryset.filter(q)
 
@@ -755,7 +754,7 @@ def get_objects_for_group(
             if app_label is not None and app_label != new_app_label:
                 raise MixedContentTypeError(
                     "Given perms must have same app "
-                    "label (%s != %s)" % (app_label, new_app_label)
+                    f"label ({app_label} != {new_app_label})"
                 )
             else:
                 app_label = new_app_label
@@ -769,7 +768,7 @@ def get_objects_for_group(
             if ctype is not None and ctype != new_ctype:
                 raise MixedContentTypeError(
                     "ContentType was once computed "
-                    "to be %s and another one %s" % (ctype, new_ctype)
+                    f"to be {ctype} and another one {new_ctype}"
                 )
             else:
                 ctype = new_ctype
@@ -835,21 +834,48 @@ def get_objects_for_group(
 
     pk_field = fields[0]
     values = groups_obj_perms_queryset
-    return queryset.filter(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
-
+    return queryset.filter(
+        pk__in=values.values_list(_handle_pk_field(queryset, pk_field))
+    )
 
 
 def filter_perms_queryset_by_objects(perms_queryset, objects):
-    if not isinstance(objects, QuerySet):
+    if not isinstance(objects, models.QuerySet):
         return perms_queryset
     else:
         field = "content_object__pk"
         if perms_queryset.model.objects.is_generic():
             field = "object_pk"
-        return perms_queryset.filter(
-            **{
-                f"{field}__in": list(
-                    objects.values_list("pk", flat=True).distinct().order_by()
-                )
-            }
+        return perms_queryset.filter(**{f"{field}__in": objects.values_list("pk")})
+
+
+def _handle_pk_field(queryset, field):
+    pk = queryset.model._meta.pk
+
+    if isinstance(pk, models.ForeignKey):
+        return _handle_pk_field(pk.target_field, field)
+
+    if isinstance(
+        pk,
+        (
+            models.IntegerField,
+            models.AutoField,
+            models.BigIntegerField,
+            models.PositiveIntegerField,
+            models.PositiveSmallIntegerField,
+            models.SmallIntegerField,
+        ),
+    ):
+        return Cast(field, output_field=models.BigIntegerField())
+
+    if isinstance(pk, models.UUIDField):
+        if connection.features.has_native_uuid_field:
+            return Cast(field, output_field=models.UUIDField())
+        return Replace(
+            field,
+            text=models.Value("-"),
+            replacement=models.Value(""),
+            output_field=models.CharField(),
         )
+
+    return field
