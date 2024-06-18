@@ -674,11 +674,11 @@ def get_objects_for_user(
 
     pk_field = user_fields[0]
     values = user_obj_perms_queryset
-    q = Q(pk__in=values.values(_handle_pk_field(queryset, pk_field)))
+    q = Q(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
     if use_groups:
         pk_field = group_fields[0]
         values = groups_obj_perms_queryset
-        q |= Q(pk__in=_handle_pk_field(queryset, pk_field))
+        q |= Q(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
 
     return queryset.filter(q)
 
@@ -835,7 +835,7 @@ def get_objects_for_group(
 
     pk_field = fields[0]
     values = groups_obj_perms_queryset
-    return queryset.filter(pk__in=values.values(_handle_pk_field(queryset, pk_field)))
+    return queryset.filter(pk__in=values.values_list(_handle_pk_field(queryset, pk_field)))
 
 
 

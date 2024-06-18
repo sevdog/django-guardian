@@ -155,7 +155,7 @@ class BaseObjectPermissionManager(models.Manager):
             perm, queryset.model
         )
         if self.is_generic():
-            filters &= Q(object_pk__in=queryset.values(_handle_pk_field(queryset, 'pk')))
+            filters &= Q(object_pk__in=queryset.values_list(_handle_pk_field(queryset, 'pk')))
         else:
             filters &= Q(content_object__in=queryset)
 
