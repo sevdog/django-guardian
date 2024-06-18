@@ -12,7 +12,6 @@ from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.db.models import (
-    AutoField,
     BigIntegerField,
     CharField,
     Count,
@@ -20,11 +19,8 @@ from django.db.models import (
     IntegerField,
     Manager,
     Model,
-    PositiveIntegerField,
-    PositiveSmallIntegerField,
     Q,
     QuerySet,
-    SmallIntegerField,
     UUIDField,
 )
 from django.db.models.expressions import Value
@@ -443,7 +439,9 @@ def get_users_with_perms(
 
 
 def get_groups_with_perms(
-    obj: Model, attach_perms: bool = False, only_with_perms_in: Optional[list[str]] = None
+    obj: Model,
+    attach_perms: bool = False,
+    only_with_perms_in: Optional[list[str]] = None,
 ) -> Union[Group, dict]:
     """Get all groups with *any* object permissions for the given `obj`.
 
@@ -702,9 +700,7 @@ def get_objects_for_user(
 
     # Now we should extract the list of pk values for which we would filter the queryset
     user_model = get_user_obj_perms_model(queryset.model)
-    user_obj_perms_queryset = filter_perms_queryset_by_objects(
-        user_model.objects.filter(user=user).filter(permission__content_type=ctype), klass
-    )
+    user_obj_perms_queryset = user_model.objects.filter(user=user).filter(permission__content_type=ctype)
     if len(codenames):
         user_obj_perms_queryset = user_obj_perms_queryset.filter(permission__codename__in=codenames)
     direct_fields = ["content_object__pk", "permission__codename"]
@@ -720,13 +716,9 @@ def get_objects_for_user(
             "permission__content_type": ctype,
             "group__in": user.groups.all(),
         }
-        if len(codenames):
-            group_filters.update(
-                {
-                    "permission__codename__in": codenames,
-                }
-            )
-        groups_obj_perms_queryset = filter_perms_queryset_by_objects(group_model.objects.filter(**group_filters), klass)
+        if codenames:
+            group_filters["permission__codename__in"] = codenames
+        groups_obj_perms_queryset = group_model.objects.filter(**group_filters)
         if group_model.objects.is_generic():
             group_fields = generic_fields
         else:
@@ -908,9 +900,7 @@ def get_objects_for_group(
     # Now we should extract list of pk values for which we would filter
     # queryset
     group_model = get_group_obj_perms_model(queryset.model)
-    groups_obj_perms_queryset = filter_perms_queryset_by_objects(
-        group_model.objects.filter(group=group).filter(permission__content_type=ctype), klass
-    )
+    groups_obj_perms_queryset = group_model.objects.filter(group=group).filter(permission__content_type=ctype)
     if len(codenames):
         groups_obj_perms_queryset = groups_obj_perms_queryset.filter(permission__codename__in=codenames)
     if group_model.objects.is_generic():
@@ -948,23 +938,13 @@ def get_objects_for_group(
         return queryset.filter(str_pk__in=values)
 
 
-def _handle_pk_field(queryset):
+def _handle_pk_field(queryset, field):
     pk = queryset.model._meta.pk
 
     if isinstance(pk, ForeignKey):
         return _handle_pk_field(pk.target_field)
 
-    if isinstance(
-        pk,
-        (
-            IntegerField,
-            AutoField,
-            BigIntegerField,
-            PositiveIntegerField,
-            PositiveSmallIntegerField,
-            SmallIntegerField,
-        ),
-    ):
+    if isinstance(pk, IntegerField):
         return partial(Cast, output_field=BigIntegerField())
 
     if isinstance(pk, UUIDField):
@@ -978,25 +958,3 @@ def _handle_pk_field(queryset):
         )
 
     return None
-
-
-def filter_perms_queryset_by_objects(perms_queryset, objects):
-    if isinstance(objects, QuerySet):
-        field = "content_object__pk"
-        if perms_queryset.model.objects.is_generic():
-            field = "object_pk"
-            handle_pk_field = _handle_pk_field(objects)
-            if handle_pk_field is not None:
-                objects = objects.values(_pk=Cast(handle_pk_field("pk"), output_field=CharField()))
-                # Apply the same transformation to the object_pk field for consistent comparison (#930)
-                perms_queryset = perms_queryset.annotate(
-                    _transformed_object_pk=Cast(handle_pk_field(field), output_field=CharField())
-                )
-                field = "_transformed_object_pk"
-            else:
-                objects = objects.values("pk")
-        else:
-            objects = objects.values("pk")
-        return perms_queryset.filter(**{"{}__in".format(field): objects})
-    else:
-        return perms_queryset
