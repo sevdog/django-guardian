@@ -17,6 +17,7 @@ def show_settings(settings, action):
             value = db_conf[key]
         line = '    {}: "{}"'.format(key, value)
         output.append(line)
+
     embracer = colorize('=' * len(max(output, key=lambda s: len(s))),
                         fg='green', opts=['bold'])
     output = [colorize(line, fg='blue') for line in output]
