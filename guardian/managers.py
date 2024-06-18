@@ -4,7 +4,7 @@ from django.db.models import Q
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
 from guardian.exceptions import ObjectNotPersisted
-from guardian.shortcuts import _handle_pk_field
+from guardian.utils import _handle_pk_field
 from django.contrib.auth.models import Permission
 
 import warnings

@@ -8,11 +8,13 @@ they actual input parameters/output type may change in future releases.
 import logging
 from itertools import chain
 
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model
 from django.contrib.auth.models import AnonymousUser, Group
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
-from django.db.models import Model, QuerySet
+from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist, PermissionDenied
+from django.db import connection, models
+from django.db.models.functions import Cast, Replace
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render
 from guardian.conf import settings as guardian_settings
@@ -67,7 +69,7 @@ def get_identity(identity):
         identity = get_anonymous_user()
 
     # get identity from queryset model type
-    if isinstance(identity, QuerySet):
+    if isinstance(identity, models.QuerySet):
         identity_model_type = identity.model
         if identity_model_type == get_user_model():
             return identity, None
@@ -136,9 +138,6 @@ def get_40x_or_None(request, perms, obj=None, login_url=None,
                                      redirect_field_name)
 
 
-from django.apps import apps as django_apps
-from django.core.exceptions import ImproperlyConfigured
-
 def get_obj_perm_model_by_conf(setting_name):
     """
     Return the model that matches the guardian settings.
@@ -191,9 +190,6 @@ def get_obj_perms_model(obj, base_cls, generic_cls):
     if obj is None:
         return generic_cls
 
-    if isinstance(obj, Model):
-        obj = obj.__class__
-
     fields = (f for f in obj._meta.get_fields()
                 if (f.one_to_many or f.one_to_one) and f.auto_created)
 
@@ -238,3 +234,35 @@ def evict_obj_perms_cache(obj):
         delattr(obj, '_guardian_perms_cache')
         return True
     return False
+
+
+def _handle_pk_field(queryset, field):
+    pk = queryset.model._meta.pk
+
+    if isinstance(pk, models.ForeignKey):
+        return _handle_pk_field(pk.target_field, field)
+
+    if isinstance(
+        pk,
+        (
+            models.IntegerField,
+            models.AutoField,
+            models.BigIntegerField,
+            models.PositiveIntegerField,
+            models.PositiveSmallIntegerField,
+            models.SmallIntegerField,
+        ),
+    ):
+        return Cast(field, output_field=models.BigIntegerField())
+
+    if isinstance(pk, models.UUIDField):
+        if connection.features.has_native_uuid_field:
+            return Cast(field, output_field=models.UUIDField())
+        return Replace(
+            field,
+            text=models.Value("-"),
+            replacement=models.Value(""),
+            output_field=models.CharField(),
+        )
+
+    return field

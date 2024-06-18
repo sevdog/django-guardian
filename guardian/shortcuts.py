@@ -10,22 +10,8 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.db import connection
 from django.db.models import Count, Q, QuerySet
 from django.shortcuts import _get_queryset
-from django.db.models.expressions import Value
-from django.db.models.functions import Cast, Replace
-from django.db.models import (
-    AutoField,
-    BigIntegerField,
-    CharField,
-    ForeignKey,
-    IntegerField,
-    PositiveIntegerField,
-    PositiveSmallIntegerField,
-    SmallIntegerField,
-    UUIDField,
-)
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
 from guardian.exceptions import (
@@ -38,6 +24,7 @@ from guardian.utils import (
     get_group_obj_perms_model,
     get_identity,
     get_user_obj_perms_model,
+    _handle_pk_field,
 )
 
 GroupObjectPermission = get_group_obj_perms_model()
@@ -850,37 +837,6 @@ def get_objects_for_group(
     values = groups_obj_perms_queryset
     return queryset.filter(pk__in=values.values(_handle_pk_field(queryset, pk_field)))
 
-
-def _handle_pk_field(queryset, field):
-    pk = queryset.model._meta.pk
-
-    if isinstance(pk, ForeignKey):
-        return _handle_pk_field(pk.target_field, field)
-
-    if isinstance(
-        pk,
-        (
-            IntegerField,
-            AutoField,
-            BigIntegerField,
-            PositiveIntegerField,
-            PositiveSmallIntegerField,
-            SmallIntegerField,
-        ),
-    ):
-        return Cast(field, output_field=BigIntegerField())
-
-    if isinstance(pk, UUIDField):
-        if connection.features.has_native_uuid_field:
-            return Cast(field, output_field=UUIDField())
-        return Replace(
-            field,
-            text=Value("-"),
-            replacement=Value(""),
-            output_field=CharField(),
-        )
-
-    return field
 
 
 def filter_perms_queryset_by_objects(perms_queryset, objects):
