@@ -618,9 +618,8 @@ def get_objects_for_user(
     # Now we should extract list of pk values for which we would filter
     # queryset
     user_model = get_user_obj_perms_model(queryset.model)
-    user_obj_perms_queryset = filter_perms_queryset_by_objects(
-        user_model.objects.filter(user=user).filter(permission__content_type=ctype),
-        klass,
+    user_obj_perms_queryset = user_model.objects.filter(user=user).filter(
+        permission__content_type=ctype
     )
     if codenames:
         user_obj_perms_queryset = user_obj_perms_queryset.filter(
@@ -641,9 +640,7 @@ def get_objects_for_user(
         }
         if codenames:
             group_filters["permission__codename__in"] = codenames
-        groups_obj_perms_queryset = filter_perms_queryset_by_objects(
-            group_model.objects.filter(**group_filters), klass
-        )
+        groups_obj_perms_queryset = group_model.objects.filter(**group_filters)
         if group_model.objects.is_generic():
             group_fields = generic_fields
         else:
@@ -760,9 +757,8 @@ def get_objects_for_group(
     # Now we should extract list of pk values for which we would filter
     # queryset
     group_model = get_group_obj_perms_model(queryset.model)
-    groups_obj_perms_queryset = filter_perms_queryset_by_objects(
-        group_model.objects.filter(group=group).filter(permission__content_type=ctype),
-        klass,
+    groups_obj_perms_queryset = group_model.objects.filter(group=group).filter(
+        permission__content_type=ctype
     )
     if codenames:
         groups_obj_perms_queryset = groups_obj_perms_queryset.filter(
@@ -788,22 +784,6 @@ def get_objects_for_group(
     return queryset.filter(
         pk__in=values.values_list(_handle_pk_field(queryset, pk_field))
     )
-
-
-def filter_perms_queryset_by_objects(perms_queryset, objects):
-    if isinstance(objects, models.QuerySet):
-        if perms_queryset.model.objects.is_generic():
-            field = "object_pk"
-            pk_field = Cast(
-                "pk", output_field=perms_queryset.model._meta.get_field("object_pk")
-            )
-        else:
-            field = "content_object__pk"
-            pk_field = "pk"
-        return perms_queryset.filter(**{f"{field}__in": objects.values_list(pk_field)})
-    else:
-
-        return perms_queryset
 
 
 def _handle_pk_field(queryset, field):

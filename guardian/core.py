@@ -279,9 +279,7 @@ class ObjectPermissionChecker:
             for p in perms:
                 if p[:2] not in cache:
                     cache[p[:2]] = []
-                cache[p[:2]] += [
-                    p[2],
-                ]
+                cache[p[:2]] += [p[2]]
         obj._guardian_perms_cache = cache
         return obj, cache
 
