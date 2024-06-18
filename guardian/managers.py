@@ -4,6 +4,7 @@ from django.db.models import Q
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
 from guardian.exceptions import ObjectNotPersisted
+from guardian.shortcuts import _handle_pk_field
 from django.contrib.auth.models import Permission
 
 import warnings
@@ -131,7 +132,7 @@ class BaseObjectPermissionManager(models.Manager):
         is that ``post_delete`` signals would NOT be fired.
         """
         if getattr(obj, "pk", None) is None:
-            raise ObjectNotPersisted("Object %s needs to be persisted first" % obj)
+            raise ObjectNotPersisted(f"Object {obj} needs to be persisted first")
 
         filters = Q(**{self.user_or_group_field: user_or_group}) & _get_perm_filter(
             perm, obj
@@ -154,7 +155,7 @@ class BaseObjectPermissionManager(models.Manager):
             perm, queryset.model
         )
         if self.is_generic():
-            filters &= Q(object_pk__in=queryset.values("pk"))
+            filters &= Q(object_pk__in=queryset.values(_handle_pk_field(queryset, 'pk')))
         else:
             filters &= Q(content_object__in=queryset)
 
