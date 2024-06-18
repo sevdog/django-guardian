@@ -10,12 +10,11 @@ from operator import itemgetter
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
-from django.contrib.contenttypes.models import ContentType
 from django.db import connection, models
 from django.db.models.functions import Cast, Replace
 from django.shortcuts import _get_queryset
 from guardian.core import ObjectPermissionChecker
-from guardian.ctypes import get_content_type
+from guardian.ctypes import _get_ct_cached, get_content_type
 from guardian.exceptions import (
     MixedContentTypeError,
     WrongAppError,
@@ -432,9 +431,7 @@ def _compute_codenames_and_ctype(perms):
             codename = perm
         codenames.add(codename)
         if app_label is not None:
-            new_ctype = ContentType.objects.get(
-                app_label=app_label, permission__codename=codename
-            )
+            new_ctype = _get_ct_cached(app_label, codename)
             if ctype is not None and ctype != new_ctype:
                 raise MixedContentTypeError(
                     "ContentType was once computed "
@@ -788,26 +785,17 @@ def get_objects_for_group(
 
 def _handle_pk_field(queryset, field):
     pk = queryset.model._meta.pk
-
     if isinstance(pk, models.ForeignKey):
         return _handle_pk_field(pk.target_field, field)
 
-    if isinstance(
-        pk,
-        (
-            models.IntegerField,
-            models.AutoField,
-            models.BigIntegerField,
-            models.PositiveIntegerField,
-            models.PositiveSmallIntegerField,
-            models.SmallIntegerField,
-        ),
-    ):
+    # every int-related fields inherith from IntergerField, even autofields
+    if isinstance(pk, models.IntegerField):
         return Cast(field, output_field=models.BigIntegerField())
-
     if isinstance(pk, models.UUIDField):
         if connection.features.has_native_uuid_field:
             return Cast(field, output_field=models.UUIDField())
+        # manual cast to UUID.hex which is how they are stored
+        # when database does not support nativi field
         return Replace(
             field,
             text=models.Value("-"),
