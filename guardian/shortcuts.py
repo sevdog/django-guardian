@@ -542,7 +542,7 @@ def _compute_queryset(
         raise WrongAppError("Cannot determine content type")
     else:
         queryset = _get_queryset(klass)
-        if ctype.model_class() != queryset.model:
+        if ctype != get_content_type(queryset.model):
             raise MixedContentTypeError("Content type for given perms and klass differs")
     return ctype, queryset
 
@@ -895,10 +895,10 @@ def get_objects_for_group(
         return queryset.filter(str_pk__in=values)
 
 
-def _handle_pk_field(queryset, field):
+def _handle_pk_field(queryset: Union[models.QuerySet, models.Manager]) -> Union[partial, None]:
     pk = queryset.model._meta.pk
 
-    if isinstance(pk, models.Count):
+    if isinstance(pk, models.ForeignKey):
         return _handle_pk_field(pk.target_field)
 
     if isinstance(pk, models.IntegerField):
