@@ -95,12 +95,12 @@ class ObjectPermissionChecker:
         if model.objects.is_generic():
             group_filters.update(
                 {
-                    "%s__content_type" % related_name: ctype,
-                    "%s__object_pk" % related_name: obj.pk,
+                    f"{related_name}__content_type": ctype,
+                    f"{related_name}__object_pk": obj.pk,
                 }
             )
         else:
-            group_filters["%s__content_object" % related_name] = obj
+            group_filters[f"{related_name}__content_object"] = obj
 
         return group_filters
 
@@ -114,12 +114,12 @@ class ObjectPermissionChecker:
         if model.objects.is_generic():  # type: ignore[attr-defined]
             user_filters.update(
                 {
-                    "%s__content_type" % related_name: ctype,
-                    "%s__object_pk" % related_name: obj.pk,
+                    f"{related_name}__content_type": ctype,
+                    f"{related_name}__object_pk": obj.pk,
                 }
             )
         else:
-            user_filters["%s__content_object" % related_name] = obj
+            user_filters[f"{related_name}__content_object"] = obj
 
         return user_filters
 
