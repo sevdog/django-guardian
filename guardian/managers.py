@@ -4,11 +4,24 @@ import warnings
 from django.contrib.auth.models import Permission
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
-from django.db.models import Model, Q, QuerySet
+from django.db.models.functions import Cast
 
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
 from guardian.exceptions import ObjectNotPersisted
+
+
+def _ensure_permission(perm: Union[Permission, str], ctype) -> Permission:
+    if not isinstance(perm, Permission):
+        perm = Permission.objects.get(content_type=ctype, codename=perm)
+
+    return perm
+
+
+def _get_perm_filter(perm: Union[Permission, str], model: Union[models.Model, type[models.Model]]) -> models.Q:
+    if isinstance(perm, Permission):
+        return models.Q(permission=perm)
+    return models.Q(permission__codename=perm, permission__content_type=get_content_type(model))
 
 
 class BaseObjectPermissionManager(models.Manager):
@@ -27,17 +40,16 @@ class BaseObjectPermissionManager(models.Manager):
         except FieldDoesNotExist:
             return False
 
-    def assign_perm(self, perm: str, user_or_group: Any, obj: Model) -> Any:
+    def assign_perm(self, perm: str, user_or_group: Any, obj: models.Model) -> Any:
         """Assigns permission with given `perm` for an instance `obj` and `user`."""
         if getattr(obj, "pk", None) is None:
-            raise ObjectNotPersisted("Object %s needs to be persisted first" % obj)
+            raise ObjectNotPersisted(f"Object {obj} needs to be persisted first")
         ctype = get_content_type(obj)
-        if not isinstance(perm, Permission):
-            permission = Permission.objects.get(content_type=ctype, codename=perm)
-        else:
-            permission = perm
-
-        kwargs = {"permission": permission, self.user_or_group_field: user_or_group}
+        permission = _ensure_permission(perm, ctype)
+        kwargs = {
+            "permission": permission,
+            self.user_or_group_field: user_or_group,
+        }
         if self.is_generic():
             kwargs["content_type"] = ctype
             kwargs["object_pk"] = obj.pk
@@ -48,7 +60,11 @@ class BaseObjectPermissionManager(models.Manager):
         return obj_perm
 
     def bulk_assign_perm(
-        self, perm: str, user_or_group: Any, queryset: QuerySet, ignore_conflicts: bool = False
+        self,
+        perm: str,
+        user_or_group: Any,
+        queryset: models.QuerySet,
+        ignore_conflicts: bool = False,
     ) -> Any:
         """
         Bulk assigns permissions with given `perm` for an objects in `queryset` and
@@ -59,18 +75,17 @@ class BaseObjectPermissionManager(models.Manager):
         else:
             ctype = get_content_type(queryset.model)
 
-        if not isinstance(perm, Permission):
-            permission = Permission.objects.get(content_type=ctype, codename=perm)
-        else:
-            permission = perm
-
+        permission = _ensure_permission(perm, ctype)
         checker = ObjectPermissionChecker(user_or_group)
         checker.prefetch_perms(queryset)
 
         assigned_perms = []
         for instance in queryset:
             if not checker.has_perm(permission.codename, instance):
-                kwargs = {"permission": permission, self.user_or_group_field: user_or_group}
+                kwargs = {
+                    "permission": permission,
+                    self.user_or_group_field: user_or_group,
+                }
                 if self.is_generic():
                     kwargs["content_type"] = ctype
                     kwargs["object_pk"] = instance.pk
@@ -81,16 +96,18 @@ class BaseObjectPermissionManager(models.Manager):
 
         return assigned_perms
 
-    def assign_perm_to_many(self, perm: str, users_or_groups: Any, obj: Model, ignore_conflicts: bool = False) -> Any:
+    def assign_perm_to_many(
+        self,
+        perm: str,
+        users_or_groups: Any,
+        obj: models.Model,
+        ignore_conflicts: bool = False,
+    ) -> Any:
         """
         Bulk assigns given `perm` for the object `obj` to a set of users or a set of groups.
         """
         ctype = get_content_type(obj)
-        if not isinstance(perm, Permission):
-            permission = Permission.objects.get(content_type=ctype, codename=perm)
-        else:
-            permission = perm
-
+        permission = _ensure_permission(perm, ctype)
         kwargs = {"permission": permission}
         if self.is_generic():
             kwargs["content_type"] = ctype
@@ -106,7 +123,7 @@ class BaseObjectPermissionManager(models.Manager):
 
         return self.model.objects.bulk_create(to_add, ignore_conflicts=ignore_conflicts)
 
-    def assign(self, perm: str, user_or_group: Any, obj: Model) -> Any:
+    def assign(self, perm: str, user_or_group: Any, obj: models.Model) -> Any:
         """Depreciated function name left in for compatibility"""
         warnings.warn(
             "UserObjectPermissionManager method 'assign' is being renamed to 'assign_perm'. Update your code accordingly as old name will be depreciated in 2.0 version.",
@@ -114,7 +131,7 @@ class BaseObjectPermissionManager(models.Manager):
         )
         return self.assign_perm(perm, user_or_group, obj)
 
-    def remove_perm(self, perm: str, user_or_group: Any, obj: Model) -> tuple[int, dict]:
+    def remove_perm(self, perm: str, user_or_group: Any, obj: models.Model) -> tuple[int, dict]:
         """
         Removes permission `perm` for an instance `obj` and given `user_or_group`.
 
@@ -123,19 +140,15 @@ class BaseObjectPermissionManager(models.Manager):
         The main implication of this is that `post_delete` signals would NOT be fired.
         """
         if getattr(obj, "pk", None) is None:
-            raise ObjectNotPersisted("Object %s needs to be persisted first" % obj)
+            raise ObjectNotPersisted(f"Object {obj} needs to be persisted first")
 
-        filters = Q(**{self.user_or_group_field: user_or_group})
-
-        if isinstance(perm, Permission):
-            filters &= Q(permission=perm)
-        else:
-            filters &= Q(permission__codename=perm, permission__content_type=get_content_type(obj))
+        filters = models.Q(**{self.user_or_group_field: user_or_group})
+        filters &= _get_perm_filter(perm, obj)
 
         if self.is_generic():
-            filters &= Q(object_pk=obj.pk)
+            filters &= models.Q(object_pk=obj.pk)
         else:
-            filters &= Q(content_object__pk=obj.pk)
+            filters &= models.Q(content_object__pk=obj.pk)
         return self.filter(filters).delete()
 
     def bulk_remove_perm(
@@ -168,7 +181,7 @@ class BaseObjectPermissionManager(models.Manager):
             else:
                 filters &= Q(object_pk__in=[str(pk) for pk in queryset.values_list("pk", flat=True)])
         else:
-            filters &= Q(content_object__in=queryset)
+            filters &= models.Q(content_object__in=queryset)
 
         return self.filter(filters).delete()
 
@@ -202,13 +215,9 @@ class UserObjectPermissionManager(BaseObjectPermissionManager):
         `guardian.managers.UserObjectPermissionManager`
     """
 
-    pass
-
 
 class GroupObjectPermissionManager(BaseObjectPermissionManager):
     """
     See Also:
         `guardian.managers.UserObjectPermissionManager`
     """
-
-    pass

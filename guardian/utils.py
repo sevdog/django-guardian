@@ -425,9 +425,6 @@ def get_obj_perms_model(obj: Optional[Model], base_cls: type[Model], generic_cls
     if obj is None:
         return generic_cls
 
-    if isinstance(obj, Model):
-        obj = obj.__class__
-
     fields = (
         f
         for f in obj._meta.get_fields()  # type: ignore[union-attr] # obj is already checked for None
