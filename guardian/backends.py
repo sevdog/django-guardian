@@ -1,4 +1,5 @@
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any, Optional
 
 from django.contrib.auth import get_user_model
 from django.db import models

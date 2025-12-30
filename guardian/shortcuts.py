@@ -3,7 +3,7 @@
 from collections import defaultdict
 from functools import lru_cache, partial
 from itertools import groupby
-from typing import Any, Optional, Type, TypeVar, Union
+from typing import Any, Optional, TypeVar, Union
 import warnings
 
 from django.apps import apps
@@ -517,7 +517,7 @@ T = TypeVar("T", bound=Model)
 def get_objects_for_user(
     user: Any,
     perms: Union[str, list[str]],
-    klass: Union[Type[T], Manager[T], QuerySet[T], None] = None,
+    klass: Union[type[T], Manager[T], QuerySet[T], None] = None,
     use_groups: bool = True,
     any_perm: bool = False,
     with_superuser: bool = True,
@@ -631,9 +631,7 @@ def get_objects_for_user(
         if "." in perm:
             new_app_label, codename = perm.split(".", 1)
             if app_label is not None and app_label != new_app_label:
-                raise MixedContentTypeError(
-                    "Given perms must have same app label ({} != {})".format(app_label, new_app_label)
-                )
+                raise MixedContentTypeError(f"Given perms must have same app label ({app_label} != {new_app_label})")
             else:
                 app_label = new_app_label
         else:
@@ -642,9 +640,7 @@ def get_objects_for_user(
         if app_label is not None:
             new_ctype = new_ctype = _get_ct_cached(app_label, codename)
             if ctype is not None and ctype != new_ctype:
-                raise MixedContentTypeError(
-                    "ContentType was once computed to be {} and another one {}".format(ctype, new_ctype)
-                )
+                raise MixedContentTypeError(f"ContentType was once computed to be {ctype} and another one {new_ctype}")
             else:
                 ctype = new_ctype
 
@@ -852,9 +848,7 @@ def get_objects_for_group(
         if "." in perm:
             new_app_label, codename = perm.split(".", 1)
             if app_label is not None and app_label != new_app_label:
-                raise MixedContentTypeError(
-                    "Given perms must have same app label ({} != {})".format(app_label, new_app_label)
-                )
+                raise MixedContentTypeError(f"Given perms must have same app label ({app_label} != {new_app_label})")
             else:
                 app_label = new_app_label
         else:
@@ -863,9 +857,7 @@ def get_objects_for_group(
         if app_label is not None:
             new_ctype = _get_ct_cached(app_label, codename)
             if ctype is not None and ctype != new_ctype:
-                raise MixedContentTypeError(
-                    "ContentType was once computed to be {} and another one {}".format(ctype, new_ctype)
-                )
+                raise MixedContentTypeError(f"ContentType was once computed to be {ctype} and another one {new_ctype}")
             else:
                 ctype = new_ctype
 

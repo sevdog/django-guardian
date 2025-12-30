@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from itertools import chain
-from typing import Iterable, Optional
+from typing import Optional
 
 from django.contrib.auth.models import Permission
 from django.db.models import Model
