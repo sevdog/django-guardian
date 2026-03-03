@@ -176,25 +176,25 @@ def assign(perm, user_or_group, obj=None):
 def remove_perm(
     perm: Union[str, Permission],
     user_or_group: Any = None,
-    obj: Union[Model, QuerySet, list, None] = None,
+    obj: Union[models.Model, models.QuerySet, list, None] = None,
 ) -> Union[tuple[int, dict], None]:
     """Removes permission from user/group and object pair.
 
     Parameters:
         perm (str | Permission): permission to remove for the given `obj`, in format: `app_label.codename` or `codename` or `Permission` instance.
             If `obj` is not given, must be in format `app_label.codename` or `Permission` instance.
-        user_or_group (User | AnonymousUser | Group | list | QuerySet):
+        user_or_group (User | AnonymousUser | Group | list | models.QuerySet):
             instance of `User`, `AnonymousUser`, `Group`,
             list of `User` or `Group`, or queryset of `User` or `Group`;
             passing any other object would raise a `guardian.exceptions.NotUserNorGroup` exception
-        obj (Model | QuerySet | None): Django's `Model` instance or QuerySet or
-            a list of Django `Model` instances or `None` if removing global permission.
+        obj (models.Model | models.QuerySet | None): Django's `models.Model` instance or models.QuerySet or
+            a list of Django `models.Model` instances or `None` if removing global permission.
             *Default* is `None`.
     """
     if isinstance(user_or_group, list) and not user_or_group:
         return None
 
-    if obj is None and isinstance(user_or_group, (QuerySet, list)):
+    if obj is None and isinstance(user_or_group, (models.QuerySet, list)):
         raise MultipleIdentityAndObjectError("Bulk global permissions removal is not supported")
 
     user, group = get_identity(user_or_group)
@@ -213,8 +213,8 @@ def remove_perm(
     if isinstance(obj, list) and not obj:
         return None
 
-    if isinstance(obj, (QuerySet, list)):
-        if isinstance(user_or_group, (QuerySet, list)):
+    if isinstance(obj, (models.QuerySet, list)):
+        if isinstance(user_or_group, (models.QuerySet, list)):
             raise MultipleIdentityAndObjectError("Only bulk operations on either users/groups OR objects are supported")
         if user:
             model = get_user_obj_perms_model(obj[0] if isinstance(obj, list) else obj.model)
@@ -223,7 +223,7 @@ def remove_perm(
             model = get_group_obj_perms_model(obj[0] if isinstance(obj, list) else obj.model)
             return model.objects.bulk_remove_perm(perm, group, obj)
 
-    if isinstance(user_or_group, (QuerySet, list)):
+    if isinstance(user_or_group, (models.QuerySet, list)):
         if user:
             model = get_user_obj_perms_model(obj)
             return model.objects.remove_perm_from_many(perm, user, obj)
@@ -241,7 +241,7 @@ def remove_perm(
     return None
 
 
-def get_perms(user_or_group: Any, obj: Model) -> list[str]:
+def get_perms(user_or_group: Any, obj: models.Model) -> list[str]:
     """Get all permissions for given user/group and object pair.
 
     This function returns a comprehensive list of all permissions that the user or group
@@ -263,7 +263,7 @@ def get_perms(user_or_group: Any, obj: Model) -> list[str]:
     return check.get_perms(obj)
 
 
-def get_user_perms(user: Any, obj: Model) -> QuerySet:
+def get_user_perms(user: Any, obj: models.Model) -> models.QuerySet:
     """Get permissions assigned DIRECTLY to a user for a specific object.
 
     This function returns ONLY permissions that are explicitly assigned to the user
@@ -274,18 +274,18 @@ def get_user_perms(user: Any, obj: Model) -> QuerySet:
         obj: Django model instance for which to check permissions
 
     Returns:
-        QuerySet of permission codenames (strings) that are directly assigned
+        models.QuerySet of permission codenames (strings) that are directly assigned
         to the user for the given object.
 
     Note:
-        For inactive users (is_active=False), returns empty QuerySet.
-        Return type is QuerySet, not list (unlike get_perms()).
+        For inactive users (is_active=False), returns empty models.QuerySet.
+        Return type is models.QuerySet, not list (unlike get_perms()).
     """
     check = ObjectPermissionChecker(user)
     return check.get_user_perms(obj)
 
 
-def get_group_perms(user_or_group: Any, obj: Model) -> QuerySet[Permission]:
+def get_group_perms(user_or_group: Any, obj: models.Model) -> models.QuerySet[Permission]:
     """Get permissions assigned to groups for a specific object.
 
     This function returns permissions that are assigned to groups for the given object.
@@ -297,19 +297,19 @@ def get_group_perms(user_or_group: Any, obj: Model) -> QuerySet[Permission]:
         obj: Django model instance for which to check permissions
 
     Returns:
-        QuerySet of permission codenames (strings) assigned to the group(s)
+        models.QuerySet of permission codenames (strings) assigned to the group(s)
         for the given object.
 
     Note:
-        For inactive users (is_active=False), returns empty QuerySet.
-        Return type is QuerySet, not list (unlike get_perms()).
+        For inactive users (is_active=False), returns empty models.QuerySet.
+        Return type is models.QuerySet, not list (unlike get_perms()).
         Does NOT include direct user permissions.
     """
     check = ObjectPermissionChecker(user_or_group)
     return check.get_group_perms(obj)
 
 
-def get_perms_for_model(cls: Union[Type[Model], Model, str]) -> QuerySet:
+def get_perms_for_model(cls: Union[type[models.Model], models.Model, str]) -> models.QuerySet:
     """Get all permissions for a given model class.
 
     Returns:
@@ -542,7 +542,7 @@ def _compute_queryset(
         raise WrongAppError("Cannot determine content type")
     else:
         queryset = _get_queryset(klass)
-        if ctype != get_content_type(queryset.model):
+        if ctype.model_class() != queryset.model:
             raise MixedContentTypeError("Content type for given perms and klass differs")
     return ctype, queryset
 
@@ -746,10 +746,10 @@ def get_objects_for_user(
 
     values = values.values_list(field_pk, flat=True)
     if handle_pk_field is not None:
-        q = Q(pk__in=values)
+        q = models.Q(pk__in=values)
     else:
-        queryset = queryset.annotate(str_pk=Cast("pk", CharField()))
-        q = Q(str_pk__in=values)
+        queryset = queryset.annotate(str_pk=Cast("pk", models.CharField()))
+        q = models.Q(str_pk__in=values)
     if use_groups:
         field_pk = group_fields[0]
         values = groups_obj_perms_queryset
@@ -758,9 +758,9 @@ def get_objects_for_user(
             field_pk = "obj_pk"
         values = values.values_list(field_pk, flat=True)
         if handle_pk_field is not None:
-            q |= Q(pk__in=values)
+            q |= models.Q(pk__in=values)
         else:
-            q |= Q(str_pk__in=values)
+            q |= models.Q(str_pk__in=values)
     return queryset.filter(q)
 
 
@@ -886,7 +886,7 @@ def get_objects_for_group(
         values = values.annotate(obj_pk=handle_pk_field(expression=field_pk))
         field_pk = "obj_pk"
     else:
-        queryset = queryset.annotate(str_pk=Cast("pk", CharField()))
+        queryset = queryset.annotate(str_pk=Cast("pk", models.CharField()))
 
     values = values.values_list(field_pk, flat=True)
     if handle_pk_field is not None:
@@ -895,10 +895,10 @@ def get_objects_for_group(
         return queryset.filter(str_pk__in=values)
 
 
-def _handle_pk_field(queryset: Union[models.QuerySet, models.Manager]) -> Union[partial, None]:
+def _handle_pk_field(queryset, field):
     pk = queryset.model._meta.pk
 
-    if isinstance(pk, models.ForeignKey):
+    if isinstance(pk, models.Count):
         return _handle_pk_field(pk.target_field)
 
     if isinstance(pk, models.IntegerField):

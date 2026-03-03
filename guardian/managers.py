@@ -4,7 +4,6 @@ import warnings
 from django.contrib.auth.models import Permission
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
-from django.db.models.functions import Cast
 
 from guardian.core import ObjectPermissionChecker
 from guardian.ctypes import get_content_type
@@ -152,7 +151,7 @@ class BaseObjectPermissionManager(models.Manager):
         return self.filter(filters).delete()
 
     def bulk_remove_perm(
-        self, perm: Union[str, Permission], user_or_group: Any, queryset: Union[QuerySet, list]
+        self, perm: Union[str, Permission], user_or_group: Any, queryset: Union[models.QuerySet, list]
     ) -> tuple[int, dict]:
         """
         Removes permission `perm` for a `queryset` and given `user_or_group`.
@@ -161,7 +160,7 @@ class BaseObjectPermissionManager(models.Manager):
         we use `Queryset.delete` method for removing it.
         The main implication of this is that `post_delete` signals would NOT be fired.
         """
-        filters = Q(**{self.user_or_group_field: user_or_group})
+        filters = models.Q(**{self.user_or_group_field: user_or_group})
 
         if isinstance(queryset, list):
             if not queryset:
@@ -171,40 +170,42 @@ class BaseObjectPermissionManager(models.Manager):
             ctype = get_content_type(queryset.model)
 
         if isinstance(perm, Permission):
-            filters &= Q(permission=perm)
+            filters &= models.Q(permission=perm)
         else:
-            filters &= Q(permission__codename=perm, permission__content_type=ctype)
+            filters &= models.Q(permission__codename=perm, permission__content_type=ctype)
 
         if self.is_generic():
             if isinstance(queryset, list):
-                filters &= Q(object_pk__in=[str(obj.pk) for obj in queryset])
+                filters &= models.Q(object_pk__in=[str(obj.pk) for obj in queryset])
             else:
-                filters &= Q(object_pk__in=[str(pk) for pk in queryset.values_list("pk", flat=True)])
+                filters &= models.Q(object_pk__in=[str(pk) for pk in queryset.values_list("pk", flat=True)])
         else:
             filters &= models.Q(content_object__in=queryset)
 
         return self.filter(filters).delete()
 
-    def remove_perm_from_many(self, perm: Union[str, Permission], users_or_groups: Any, obj: Model) -> tuple[int, dict]:
+    def remove_perm_from_many(
+        self, perm: Union[str, Permission], users_or_groups: Any, obj: models.Model
+    ) -> tuple[int, dict]:
         """
         Bulk removes given `perm` for the object `obj` from a set of users or a set of groups.
         """
         ctype = get_content_type(obj)
         if isinstance(perm, Permission):
-            filters = Q(permission=perm)
+            filters = models.Q(permission=perm)
         else:
-            filters = Q(permission__codename=perm, permission__content_type=ctype)
+            filters = models.Q(permission__codename=perm, permission__content_type=ctype)
         if self.is_generic():
-            filters &= Q(object_pk=str(obj.pk))
+            filters &= models.Q(object_pk=str(obj.pk))
         else:
-            filters &= Q(content_object=obj)
+            filters &= models.Q(content_object=obj)
 
         if isinstance(users_or_groups, list):
             to_remove = [item.pk for item in users_or_groups]
         else:
             to_remove = users_or_groups.values_list("pk", flat=True)
 
-        filters &= Q(**{f"{self.user_or_group_field}_id__in": to_remove})
+        filters &= models.Q(**{f"{self.user_or_group_field}_id__in": to_remove})
 
         return self.filter(filters).delete()
 
