@@ -895,7 +895,7 @@ def get_objects_for_group(
         return queryset.filter(str_pk__in=values)
 
 
-def _handle_pk_field(queryset, field):
+def _handle_pk_field(queryset):
     pk = queryset.model._meta.pk
 
     if isinstance(pk, models.Count):
